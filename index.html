@@ -30,9 +30,9 @@
       <h3>Edit</h3>
       <svg></svg>
       <h3>Vertices</h3>
-      <div id="vertices"></div>
+      <div id="vertices" class="text-left"></div>
     </div>
-    <div id="tesselation" class="col-5">
+    <div id="tile" class="col-5">
       <h3>Tesselation</h3>
       <svg></svg>
     </div>
@@ -47,8 +47,133 @@
 
 // Shape select
 d3.select("#shapeSelect").on("change", () => {
+  switch (d3.event.target.value) {
+    case "triangle":
+      shape = newTriangle();
+      update();
+      break;
+
+    case "square":
+      shape = newSquare();
+      update();
+      break;
+
+    case "hexagon":
+      shape = newHexagon();
+      update();
+      break;
+  }
   console.log(d3.event.target.value);
 });
+
+// The current svg size
+let size = getWidth();
+
+let svgEdit = d3.select("#edit").select("svg")
+    .attr("width", size)
+    .attr("height", size);
+
+svgEdit.append("g")
+    .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
+
+let svgTile = d3.select("#tile").select("svg")
+    .attr("width", size)
+    .attr("height", size);
+
+svgTile.append("g")
+    .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")");
+
+// The current shape
+let shape = newTriangle();
+
+// Initial update
+update();
+
+function update() {
+  updateEdit();
+  updateTile();
+  updateVertices();
+}
+
+function updateEdit() {
+  let g = svgEdit.select("g");
+
+  let point = g.selectAll(".point")
+      .data(shape.vertices);
+
+  point.enter().append("circle")
+      .attr("class", "point")
+    .merge(point)
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y)
+      .attr("r", 3)
+      .style("fill", "white")
+      .style("stroke", "black");
+      
+  point.exit().remove();
+
+
+}
+
+function updateTile() {
+
+}
+
+function updateVertices() {
+  let vertex = d3.select("#vertices").selectAll("p")
+      .data(shape.vertices);
+
+  vertex.enter().append("p").merge(vertex)
+      .text(vertexText);
+
+  vertex.exit().remove();
+
+  function vertexText(d, i) {
+    return "Vertex " + i + ": " + Math.round(d.x) + ", " + Math.round(d.y);
+  }
+}
+
+function newTriangle() {
+  let s = size / 20;
+  let a = 30 * Math.PI / 180;
+  let x = Math.cos(a) * s;
+  let y = Math.sin(a) * s;
+
+  let vertices = [
+    { x: 0, y: s },
+    { x: x, y: -y },
+    { x: -x, y: -y }
+  ];
+
+  return {
+    vertices: vertices,
+    lines: d3.pairs(vertices.concat(vertices[0]))
+  };
+}
+
+function newSquare() {
+  let s = size / 20;
+
+  let vertices = [
+    { x: -s, y: s },
+    { x: s, y: s },
+    { x: s, y: -s },
+    { x: -s, y: -s }
+  ];
+
+  return {
+    vertices: vertices,
+    lines: d3.pairs(vertices.concat(vertices[0]))
+  };
+}
+
+function newHexagon() {
+  return [];
+}
+
+function getWidth() {
+  return d3.select("#edit").node().clientWidth;
+}
 
 </script>
 
