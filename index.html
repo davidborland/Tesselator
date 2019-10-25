@@ -26,15 +26,16 @@
         </select>
       </div>
     </div>
-    <div id="edit" class="col-5">
+    <div class="col-5">
       <h3>Edit</h3>
-      <svg></svg>
+      <div id="edit">
+        <svg></svg></div>
       <h3>Vertices</h3>
       <div id="vertices" class="text-left"></div>
     </div>
-    <div id="tile" class="col-5">
+    <div class="col-5">
       <h3>Tesselation</h3>
-      <svg></svg>
+      <div id="tile"><svg></svg></div>
     </div>
   </div>
   <div class="text-right small">
@@ -63,7 +64,6 @@ d3.select("#shapeSelect").on("change", () => {
       update();
       break;
   }
-  console.log(d3.event.target.value);
 });
 
 // The current svg size
@@ -73,15 +73,18 @@ let svgEdit = d3.select("#edit").select("svg")
     .attr("width", size)
     .attr("height", size);
 
-svgEdit.append("g")
+let gEdit = svgEdit.append("g")
     .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
+
+gEdit.append("g").attr("class", "lines");
+gEdit.append("g").attr("class", "points");
 
 let svgTile = d3.select("#tile").select("svg")
     .attr("width", size)
     .attr("height", size);
 
 svgTile.append("g")
-    .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")");
+    .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
 
 // The current shape
 let shape = newTriangle();
@@ -95,33 +98,96 @@ function update() {
   updateVertices();
 }
 
-function updateEdit() {
-  let g = svgEdit.select("g");
+function updateEdit() {  
+  let r = 5;
 
-  let point = g.selectAll(".point")
-      .data(shape.vertices);
+  // Drag behavior for control handles
+  const drag = d3.drag()
+    .on("start", function(d) {
+      // Turn off mouse events for other handles while dragging
+      //gControl.selectAll(".handle").filter(function(e) { return e !== d; })
+      //    .style("pointer-events", "none");
+    })
+    .on("drag", function(d) {
+      d.x = d3.event.x;
+      d.y = d3.event.y;
+
+      update();
+    })
+    .on("end", function() {     
+      // Turn mouse events back on for handles
+      //gControl.selectAll(".handle")
+      //    .style("pointer-events", null);
+    });
+
+  // Draw points
+  let point = svgEdit.select(".points").selectAll("circle")
+      .data(shape.points);
 
   point.enter().append("circle")
-      .attr("class", "point")
+      .attr("r", r)
+      .style("pointer-events", "all")
     .merge(point)
       .attr("cx", d => d.x)
       .attr("cy", d => d.y)
-      .attr("r", 3)
-      .style("fill", "white")
-      .style("stroke", "black");
+      .style("fill", "#ac1a2f")
+      .style("stroke", "black")
+      .style("visibility", d => d.active ? "visible" : "hidden")
+      .on("mouseover", function(d) {
+        d.active = true;
+        update();
+      })
+      .on("mouseout", function(d) {
+        d.active = false;
+        update();
+      })
+      .call(drag);
       
   point.exit().remove();
 
+  // Draw lines
+  let line = svgEdit.select(".lines").selectAll("line")
+      .data(shape.lines);
 
+  line.enter().append("line").merge(line)
+      .attr("x1", d => d.p1.x)
+      .attr("y1", d => d.p1.y)
+      .attr("x2", d => d.p2.x)
+      .attr("y2", d => d.p2.y)
+      .style("stroke", "black");
+      
+  line.exit().remove();
 }
 
 function updateTile() {
+  let g = svgTile.select("g");
 
+  // Draw polygons
+  let polygon = g.selectAll("polygon")
+      .data([shape]);
+
+  polygon.enter().append("polygon")
+      .style("stroke", "none")
+    .merge(polygon)
+      .attr("points", points)
+      .style("fill", fill);
+
+  polygon.exit().remove();
+
+  function points(d) {
+    return d.points.map(d => {
+      return d.x + "," + d.y;
+    }).join(" ");
+  }
+
+  function fill(d) {
+    return "#ccc";
+  }
 }
 
 function updateVertices() {
   let vertex = d3.select("#vertices").selectAll("p")
-      .data(shape.vertices);
+      .data(shape.points);
 
   vertex.enter().append("p").merge(vertex)
       .text(vertexText);
@@ -139,22 +205,22 @@ function newTriangle() {
   let x = Math.cos(a) * s;
   let y = Math.sin(a) * s;
 
-  let vertices = [
+  let points = [
     { x: 0, y: s },
     { x: x, y: -y },
     { x: -x, y: -y }
   ];
 
   return {
-    vertices: vertices,
-    lines: d3.pairs(vertices.concat(vertices[0]))
+    points: points,
+    lines: linesFromPoints(points)
   };
 }
 
 function newSquare() {
   let s = size / 20;
 
-  let vertices = [
+  let points = [
     { x: -s, y: s },
     { x: s, y: s },
     { x: s, y: -s },
@@ -162,17 +228,39 @@ function newSquare() {
   ];
 
   return {
-    vertices: vertices,
-    lines: d3.pairs(vertices.concat(vertices[0]))
+    points: points,
+    lines: linesFromPoints(points)
   };
 }
 
 function newHexagon() {
-  return [];
+  let s = size / 20;
+  let a = 60 * Math.PI / 180;
+  
+  let points = d3.range(-a, 4.5 * a, a).map(d => {
+    return {
+      x: Math.cos(d) * s,
+      y: Math.sin(d) * s
+    };
+  });
+
+  return {
+    points: points,
+    lines: linesFromPoints(points)
+  };
 }
 
 function getWidth() {
   return d3.select("#edit").node().clientWidth;
+}
+
+function linesFromPoints(points) {
+  return d3.pairs(points.concat(points[0])).map(d => {
+    return {
+      p1: d[0],
+      p2: d[1]
+    };
+  });
 }
 
 </script>
