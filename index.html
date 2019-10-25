@@ -76,6 +76,54 @@ let svgEdit = d3.select("#edit").select("svg")
 let gEdit = svgEdit.append("g")
     .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
 
+gEdit.append("g").append("rect").attr("class", "background")
+    .attr("x", -size / 2)
+    .attr("y", -size / 2)
+    .attr("width", size)
+    .attr("height", size)
+    .style("visibility", "hidden")
+    .style("pointer-events", "all")
+    .on("mousemove", function() {
+      // Mouse position
+      let mp = d3.mouse(this);
+
+      // Find closest line segment
+      let closest = shape.lines.reduce((p, c, i) => {
+        let p1 = [c.p1.x, c.p1.y];
+        let p2 = [c.p2.x, c.p2.y];
+        let d = pointLineSegmentDistance(mp, p1, p2);
+
+        return p === null || d < p.d ? { i: i, d: d } : p;
+      }, null);
+
+      shape.lines.forEach(d => {
+        d.active = false;
+      });
+
+      shape.lines[closest.i].active = true;
+
+      update();
+    })
+    .on("mouseout", function() {
+      shape.lines.forEach(d => {
+        d.active = false;
+      });
+
+      update();
+    })
+    .on("click", function() {
+      let mp = d3.mouse(this);
+      mp = { x: mp[0], y: mp[1] };
+
+      let active = shape.lines.filter(d => d.active)[0];
+      let index = shape.lines.indexOf(active);
+
+      shape.points.splice(index + 1, 0, mp);
+      shape.lines = linesFromPoints(shape.points);
+
+      update();
+    });
+
 gEdit.append("g").attr("class", "lines");
 gEdit.append("g").attr("class", "points");
 
@@ -108,9 +156,21 @@ function updateEdit() {
       //gControl.selectAll(".handle").filter(function(e) { return e !== d; })
       //    .style("pointer-events", "none");
     })
-    .on("drag", function(d) {
-      d.x = d3.event.x;
-      d.y = d3.event.y;
+    .on("drag", function(d, i) {
+      let x = d3.event.x;
+      let y = d3.event.y;
+
+      let vx = x - d.x;
+      let vy = y - d.y;
+
+      d.x = x;
+      d.y = y;
+
+      let j = (i + 2) % shape.points.length;
+      let p = shape.points[j];
+
+      p.x += vx;
+      p.y += vy; 
 
       update();
     })
@@ -154,7 +214,9 @@ function updateEdit() {
       .attr("y1", d => d.p1.y)
       .attr("x2", d => d.p2.x)
       .attr("y2", d => d.p2.y)
-      .style("stroke", "black");
+      .style("stroke", "black")
+      .style("stroke-width", d => d.active ? 3 : 1)
+      .style("stroke-linecap", "round");
       
   line.exit().remove();
 }
@@ -261,6 +323,48 @@ function linesFromPoints(points) {
       p2: d[1]
     };
   });
+}
+
+function distance(p1, p2) {
+  return Math.sqrt(distance2(p1, p2));
+}
+
+function distance2(p1, p2) {
+  const x = p1[0] - p2[0],
+        y = p1[1] - p2[1];
+
+  return x * x + y * y;
+}
+
+// Return the distance between a point p and a line segment p1p2
+// Based on technique described here: http://paulbourke.net/geometry/pointlineplane/
+function pointLineSegmentDistance(p, p1, p2) {
+  return distance(p, pointLineSegmentClosestPoint(p, p1, p2));
+}
+
+function pointLineSegmentClosestPoint(p, p1, p2) {
+  // Check for coincident p1 and p2
+  if (p1[0] === p2[0] && p1[1] === p2[1]) {
+    // Return one of the points
+    return p1.slice();
+  }
+
+  // Compute u
+  const u = ((p[0] - p1[0]) * (p2[0] - p1[0]) + (p[1] - p1[1]) * (p2[1] - p1[1])) /
+            (Math.pow(p2[0] - p1[0], 2) + Math.pow(p2[1] - p1[1], 2));
+
+  // Test u
+  if (u >= 0 && u <= 1) {
+    // In line segement, return closest point on line
+    const p3 = [ p1[0] + u * (p2[0] - p1[0]),
+                 p1[1] + u * (p2[1] - p1[1]) ];
+
+    return p3;
+  }
+  else {
+    // Return closest line segment end point
+    return distance2(p, p1) < distance2(p, p2) ? p1.slice() : p2.slice();
+  }
 }
 
 </script>
