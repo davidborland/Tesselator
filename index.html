@@ -15,23 +15,27 @@
 
 <div class="container-fluid text-center">
   <div class="row">
-    <div id="controls" class="col-2">
-      <h3>Controls</h3>
-      <div class="form-group text-left">
-        <label for="shapeSelect">Shape</label>
-        <select class="form-control" id="shapeSelect">
-          <option value="triangle">Triangle</option>
-          <option value="square">Square</option>
-          <option value="hexagon">Hexagon</option>
-        </select>
+    <div class="col-2">
+      <div>
+        <h3>Controls</h3>
+        <div class="form-group text-left">
+          <label for="shapeSelect">Shape</label>
+          <select class="form-control" id="shapeSelect">
+            <option value="triangle">Triangle</option>
+            <option value="square">Square</option>
+            <option value="hexagon">Hexagon</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-secondary form-control" id="resetButton">Reset</button>
+      </div>
+      <div class="mt-5">
+        <h3>Vertices</h3>
+        <div id="vertices" class="text-left"></div>
       </div>
     </div>
     <div class="col-5">
       <h3>Edit</h3>
-      <div id="edit">
-        <svg></svg></div>
-      <h3>Vertices</h3>
-      <div id="vertices" class="text-left"></div>
+      <div id="edit"><svg></svg></div>
     </div>
     <div class="col-5">
       <h3>Tesselation</h3>
@@ -46,9 +50,52 @@
 
 <script type="text/javascript">
 
+let shapeType = "triangle";
+let shape = null;
+
+// The current svg size
+let size = getWidth();
+
+let svgEdit = d3.select("#edit").select("svg")
+    .attr("width", size)
+    .attr("height", size);
+
+let gEdit = svgEdit.append("g")
+    .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
+
+gEdit.append("g").attr("class", "background");
+gEdit.append("g").attr("class", "lines");
+gEdit.append("g").attr("class", "points");
+
+createBackground();
+
+let svgTile = d3.select("#tile").select("svg")
+    .attr("width", size)
+    .attr("height", size);
+
+svgTile.append("g")
+    .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
+
+// Initialize shape
+resetShape();
+
 // Shape select
 d3.select("#shapeSelect").on("change", () => {
-  switch (d3.event.target.value) {
+  shapeType = d3.event.target.value;
+  resetShape();
+});
+
+// Reset button
+d3.select("#resetButton").on("click", resetShape);
+
+function update() {
+  updateEdit();
+  updateTile();
+  updateVertices();
+}
+
+function resetShape() {
+  switch (shapeType) {
     case "triangle":
       shape = newTriangle();
       update();
@@ -64,86 +111,98 @@ d3.select("#shapeSelect").on("change", () => {
       update();
       break;
   }
-});
+}
 
-// The current svg size
-let size = getWidth();
+function createBackground() {  
+  let drag1 = null;
+  let drag2 = null;
 
-let svgEdit = d3.select("#edit").select("svg")
-    .attr("width", size)
-    .attr("height", size);
-
-let gEdit = svgEdit.append("g")
-    .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
-
-gEdit.append("g").append("rect").attr("class", "background")
-    .attr("x", -size / 2)
-    .attr("y", -size / 2)
-    .attr("width", size)
-    .attr("height", size)
-    .style("visibility", "hidden")
-    .style("pointer-events", "all")
-    .on("mousemove", function() {
-      // Mouse position
-      let mp = d3.mouse(this);
-
-      // Find closest line segment
-      let closest = shape.lines.reduce((p, c, i) => {
-        let p1 = [c.p1.x, c.p1.y];
-        let p2 = [c.p2.x, c.p2.y];
-        let d = pointLineSegmentDistance(mp, p1, p2);
-
-        return p === null || d < p.d ? { i: i, d: d } : p;
-      }, null);
-
-      shape.lines.forEach(d => {
-        d.active = false;
-      });
-
-      shape.lines[closest.i].active = true;
-
-      update();
-    })
-    .on("mouseout", function() {
-      shape.lines.forEach(d => {
-        d.active = false;
-      });
-
-      update();
-    })
-    .on("click", function() {
-      let mp = d3.mouse(this);
-      mp = { x: mp[0], y: mp[1] };
+  // Drag behavior
+  const drag = d3.drag()
+    .on("start", function() {      
+      let mouse = d3.mouse(this);
+      drag1 = { x: mouse[0], y: mouse[1] };
 
       let active = shape.lines.filter(d => d.active)[0];
-      let index = shape.lines.indexOf(active);
+      let activeIndex = shape.lines.indexOf(active);
 
-      shape.points.splice(index + 1, 0, mp);
+      let twin = shape.lines[active.twin];
+      let twinIndex = active.twin;
+
+      console.log(shape.lines);
+      console.log(twin);
+
+      let v = { x: drag1.x - active.p1.x, y: drag1.y - active.p1.y };
+
+      drag2 = { x: twin.p2.x + v.x, y: twin.p2.y + v.y };
+
+      shape.points.splice(activeIndex + 1, 0, drag1);
+      shape.points.splice(twinIndex + 2, 0, drag2);
+
       shape.lines = linesFromPoints(shape.points);
 
       update();
+    })
+    .on("drag", function() {
+      const i = shape.points.indexOf(drag1);
+
+      let x = d3.event.x;
+      let y = d3.event.y;
+
+      let vx = x - drag1.x;
+      let vy = y - drag1.y;
+
+      drag1.x = x;
+      drag1.y = y;
+
+      drag2.x += vx;
+      drag2.y += vy;
+
+      update();
+    })
+    .on("end", function() {     
+      drag1 = null;
+      drag2 = null;
     });
 
-gEdit.append("g").attr("class", "lines");
-gEdit.append("g").attr("class", "points");
+  svgEdit.select(".background").append("rect")
+      .attr("x", -size / 2)
+      .attr("y", -size / 2)
+      .attr("width", size)
+      .attr("height", size)
+      .style("visibility", "hidden")
+      .style("pointer-events", "all")
+      .on("mousemove", function() {
+        // Mouse position
+        let mp = d3.mouse(this);
 
-let svgTile = d3.select("#tile").select("svg")
-    .attr("width", size)
-    .attr("height", size);
+        // Find closest line segment
+        let closest = shape.lines.reduce((p, c, i) => {
+          let p1 = [c.p1.x, c.p1.y];
+          let p2 = [c.p2.x, c.p2.y];
+          let d = pointLineSegmentDistance(mp, p1, p2);
 
-svgTile.append("g")
-    .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
+          return p === null || d < p.d ? { i: i, d: d } : p;
+        }, null);
 
-// The current shape
-let shape = newTriangle();
+        shape.lines.forEach(d => {
+          d.active = false;
+        });
 
-// Initial update
-update();
+        shape.lines[closest.i].active = true;
 
-function update() {
-  updateEdit();
-  updateTile();
-  updateVertices();
+        update();
+      })
+      .on("mouseout", function() {
+        shape.lines.forEach(d => {
+          d.active = false;
+        });
+
+        update();
+      })
+      .on("click", function() {
+      })
+      .call(drag);
 }
 
 function updateEdit() {  
@@ -153,8 +212,8 @@ function updateEdit() {
   const drag = d3.drag()
     .on("start", function(d) {
       // Turn off mouse events for other handles while dragging
-      //gControl.selectAll(".handle").filter(function(e) { return e !== d; })
-      //    .style("pointer-events", "none");
+      gControl.selectAll(".handle").filter(function(e) { return e !== d; })
+          .style("pointer-events", "none");
     })
     .on("drag", function(d, i) {
       let x = d3.event.x;
@@ -176,8 +235,8 @@ function updateEdit() {
     })
     .on("end", function() {     
       // Turn mouse events back on for handles
-      //gControl.selectAll(".handle")
-      //    .style("pointer-events", null);
+      gControl.selectAll(".handle")
+          .style("pointer-events", null);
     });
 
   // Draw points
@@ -192,7 +251,8 @@ function updateEdit() {
       .attr("cy", d => d.y)
       .style("fill", "#ac1a2f")
       .style("stroke", "black")
-      .style("visibility", d => d.active ? "visible" : "hidden")
+      .style("visibility", d => d.active ? "visible" : "hidden");
+/*      
       .on("mouseover", function(d) {
         d.active = true;
         update();
@@ -202,6 +262,7 @@ function updateEdit() {
         update();
       })
       .call(drag);
+*/      
       
   point.exit().remove();
 
@@ -209,7 +270,9 @@ function updateEdit() {
   let line = svgEdit.select(".lines").selectAll("line")
       .data(shape.lines);
 
-  line.enter().append("line").merge(line)
+  line.enter().append("line")
+      .style("pointer-events", "none")
+    .merge(line)
       .attr("x1", d => d.p1.x)
       .attr("y1", d => d.p1.y)
       .attr("x2", d => d.p2.x)
@@ -289,9 +352,16 @@ function newSquare() {
     { x: -s, y: -s }
   ];
 
+  let lines = linesFromPoints(points);
+
+  lines[0].twin = 2;
+  lines[1].twin = 3;
+  lines[2].twin = 0;
+  lines[3].twin = 1;
+
   return {
     points: points,
-    lines: linesFromPoints(points)
+    lines: lines
   };
 }
 
