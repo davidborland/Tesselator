@@ -30,7 +30,7 @@
       </div>
       <div class="mt-5">
         <h3>Vertices</h3>
-        <div id="vertices" class="text-left text-monospace"></div>
+        <samp id="vertices" class="text-left"></samp>
       </div>
     </div>
     <div class="col-5">
@@ -446,10 +446,11 @@ function updateTile() {
 }
 
 function updateVertices() {
-  let vertex = d3.select("#vertices").selectAll("p")
+  let vertex = d3.select("#vertices").selectAll("div")
       .data(shape.points);
 
-  vertex.enter().append("p").merge(vertex)
+  vertex.enter().append("div")
+    .merge(vertex)
       .text(vertexText);
 
   vertex.exit().remove();
