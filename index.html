@@ -67,8 +67,8 @@ let gEdit = svgEdit.append("g")
     .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
 
 gEdit.append("g").attr("class", "background");
+gEdit.append("g").attr("class", "polygon");
 gEdit.append("g").attr("class", "lines");
-gEdit.append("g").attr("class", "points");
 
 createEditBackground();
 
@@ -329,6 +329,26 @@ function updateEdit() {
       .style("stroke-width", d => d.active ? 3 : 1);
       
   line.exit().remove();
+
+  // Draw polygon
+  let polygon = svgEdit.select(".polygon").selectAll("polygon")
+      .data([shape]);
+
+  polygon.enter().append("polygon")
+      .style("stroke", "none")
+      .style("fill", "#eaecef")
+      .style("pointer-events", "none")
+    .merge(polygon)
+      .attr("points", points);
+
+  polygon.exit().remove();
+
+  function points(d) {
+    return d.points.map(d => {
+      return d.x + "," + d.y;
+    }).join(" ");
+  }
+
 }
 
 function updateTile() {
