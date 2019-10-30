@@ -114,6 +114,7 @@ function resetShape() {
 }
 
 function createBackground() {  
+  let activeLine = null;
   let drag1 = null;
   let drag2 = null;
 
@@ -124,13 +125,10 @@ function createBackground() {
       drag1 = { x: mouse[0], y: mouse[1] };
 
       let active = shape.lines.filter(d => d.active)[0];
+      let twin = active.twin;
+
       let activeIndex = shape.lines.indexOf(active);
-
-      let twin = shape.lines[active.twin];
-      let twinIndex = active.twin;
-
-      console.log(shape.lines);
-      console.log(twin);
+      let twinIndex = shape.lines.indexOf(twin);
 
       let v = { x: drag1.x - active.p1.x, y: drag1.y - active.p1.y };
 
@@ -139,7 +137,19 @@ function createBackground() {
       shape.points.splice(activeIndex + 1, 0, drag1);
       shape.points.splice(twinIndex + 2, 0, drag2);
 
-      shape.lines = linesFromPoints(shape.points);
+      let new1 = { p1: active.p1, p2: drag1 };
+      let new2 = { p1: drag1, p2: active.p2 };
+      let new3 = { p1: twin.p1, p2: drag2 };
+      let new4 = { p1: drag2, p2: twin.p2 };
+
+      new1.twin = new4;
+      new2.twin = new3;
+      new3.twin = new2;
+      new4.twin = new1;
+
+      let offset = twinIndex > activeIndex ? 1 : 0;
+      shape.lines.splice(activeIndex, 1, new1, new2);
+      shape.lines.splice(twinIndex + offset, 1, new3, new4);
 
       update();
     })
@@ -285,14 +295,49 @@ function updateEdit() {
 }
 
 function updateTile() {
+  if (shapeType !== "square") return;
+
+  let xExtent = d3.extent(shape.points, d => d.x);
+  let yExtent = d3.extent(shape.points, d => d.y);
+
+  xExtent = xExtent[1] - xExtent[0];
+  yExtent = yExtent[1] - yExtent[0];
+
+  let w = d3.max(shape.lines, d => {
+    return Math.max(d.p1.x - d.twin.p2.x, d.p2.x - d.twin.p1.x);
+  });
+
+  let h = d3.max(shape.lines, d => {
+    return Math.max(d.p1.y - d.twin.p2.y, d.p2.y - d.twin.p1.y);
+  });
+
+  let xSize = ySize = getWidth();
+  xSize += xExtent * 2;
+  ySize += yExtent * 2;
+
+  let shapes = [];
+  for (x = 0, i = 0; x < xSize; x += w, i++) {
+    for (y = 0, j = 0; y < ySize; y += h, j++) {
+      let s = copyShape(shape);
+      translateShape(s, x, y);
+      s.i = i;
+      s.j = j;
+      shapes.push(s);
+    }
+  }
+
+  shapes.forEach(d => {
+    translateShape(d, -xSize / 2, -ySize / 2);
+  });
+
   let g = svgTile.select("g");
 
   // Draw polygons
   let polygon = g.selectAll("polygon")
-      .data([shape]);
+      .data(shapes);
 
   polygon.enter().append("polygon")
-      .style("stroke", "none")
+      .style("stroke", "#666")
     .merge(polygon)
       .attr("points", points)
       .style("fill", fill);
@@ -306,7 +351,7 @@ function updateTile() {
   }
 
   function fill(d) {
-    return "#ccc";
+    return (d.i + (d.j % 2)) % 2 === 0 ? "#ac1a2f" : "black";
   }
 }
 
@@ -322,6 +367,22 @@ function updateVertices() {
   function vertexText(d, i) {
     return "Vertex " + i + ": " + Math.round(d.x) + ", " + Math.round(d.y);
   }
+}
+
+function copyShape(shape) {
+  let points = shape.points.map(d => ({ x: d.x, y: d.y }));
+  
+  return {
+    points: points,
+    lines: linesFromPoints(points)
+  }
+}
+
+function translateShape(shape, x, y) {
+  shape.points.forEach(d => {
+    d.x += x;
+    d.y += y;
+  });
 }
 
 function newTriangle() {
@@ -354,10 +415,10 @@ function newSquare() {
 
   let lines = linesFromPoints(points);
 
-  lines[0].twin = 2;
-  lines[1].twin = 3;
-  lines[2].twin = 0;
-  lines[3].twin = 1;
+  lines[0].twin = lines[2];
+  lines[1].twin = lines[3];
+  lines[2].twin = lines[0];
+  lines[3].twin = lines[1];
 
   return {
     points: points,
