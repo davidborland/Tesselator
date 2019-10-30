@@ -29,23 +29,23 @@
         <button type="button" class="btn btn-secondary form-control" id="resetButton">Reset</button>
       </div>
       <div class="mt-5">
-        <h3>Vertices</h3>
-        <samp id="vertices" class="text-left"></samp>
+        <h3>Vertices</h3>        
+        <samp id="vertices" class="text-left card bg-light pl-1"></samp>
       </div>
     </div>
     <div class="col-5">
       <h3>Edit</h3>
-      <div id="edit"><svg></svg></div>
+      <div id="edit" class="card"><svg></svg></div>
     </div>
     <div class="col-5">
       <h3>Tesselation</h3>
       <div id="tile"><svg></svg></div>
+      <div class="text-right small mt-5">
+        <div>Author: David Borland, RENCI, UNC-Chapel Hill</div>
+        <div><a href="https://github.com/davidborland/Tesselator">GitHub repository</a></div>
+      </div>
     </div>
-  </div>
-  <div class="text-right small mt-5">
-    <div>Author: David Borland, RENCI, UNC-Chapel Hill</div>
-    <div><a href="https://github.com/davidborland/Tesselator">GitHub repository</a></div>
-  </div>
+  </div>  
 </div>
 
 <script type="text/javascript">
@@ -230,8 +230,9 @@ function createEditBackground() {
     })
     .on("drag", function() {
       // Get the mouse position
-      let x = d3.event.x;
-      let y = d3.event.y;
+      let s = size / 2;
+      let x = Math.max(-s, Math.min(d3.event.x, s));
+      let y = Math.max(-s, Math.min(d3.event.y, s));
 
       // Get change from previous
       let v = { x: x - drag1.x, y: y - drag1.y };
@@ -318,14 +319,14 @@ function updateEdit() {
 
   line.enter().append("line")
       .style("pointer-events", "none")
+      .style("stroke", "#000")
+      .style("stroke-linecap", "round")
     .merge(line)
       .attr("x1", d => d.p1.x)
       .attr("y1", d => d.p1.y)
       .attr("x2", d => d.p2.x)
       .attr("y2", d => d.p2.y)
-      .style("stroke", "black")
-      .style("stroke-width", d => d.active ? 3 : 1)
-      .style("stroke-linecap", "round");
+      .style("stroke-width", d => d.active ? 3 : 1);
       
   line.exit().remove();
 }
@@ -349,16 +350,19 @@ function updateTile() {
     let x = Math.cos(a) * s;
     let y = Math.sin(a) * s;
 
-    w = x * 2;
-    h = s + y;
+    let w = x * 2;
+    let h = s + y;
+
+    let nx = Math.ceil(size / w);
+    let ny = Math.ceil(size / h);  
 
     // Create shapes
-    for (let y = 0, j = 0; y < ySize; y += h, j++) {
-      let x = j % 2 === 0 ? 0 : w / 2;
+    for (let j = -ny; j <= ny; j++) {
+      let xOffset = j % 2 === 0 ? 0 : w / 2;
 
-      for (let i = 0; x < xSize; x += w, i++) {
+      for (let i = -nx; i <= nx; i++) {
         let s = copyShape(shape);
-        translateShape(s, x, y);
+        translateShape(s, w * i + xOffset, h * j);
         shapes.push(s);
       }
     }
@@ -374,39 +378,37 @@ function updateTile() {
       return Math.max(d.p1.y - d.twin.p2.y, d.p2.y - d.twin.p1.y);
     });
 
+    let nx = Math.ceil(size / w);
+    let ny = Math.ceil(size / h); 
+
     // Create shapes
     switch (shapeType) {
       case "square":
-        for (let x = 0, i = 0; x < xSize; x += w, i++) {
-          for (let y = 0, j = 0; y < ySize; y += h, j++) {
+        for (let i = -nx; i <= nx; i++) {
+          for (let j = -ny; j <= ny; j++) {
             let s = copyShape(shape);
-            translateShape(s, x, y);
-            s.i = i;
-            s.j = j;
+            translateShape(s, w * i, h * j);
+            s.i = i + nx;
+            s.j = j + ny;
             shapes.push(s);
           }
         }
         break;
 
       case "hexagon":
-        for (let x = 0, i = 0; x < xSize; x += w, i++) {
-          let y = i % 2 === 0 ? 0 : h / 2;
-          for (let j = 0; y < ySize; y += h, j++) {
+        for (let i = -nx; i <= nx; i++) {
+          let yOffset = i % 2 === 0 ? 0 : h / 2;
+          for (let j = -ny; j <= ny; j++) {
             let s = copyShape(shape);
-            translateShape(s, x, y);
-            s.i = i;
-            s.j = j;
+            translateShape(s, w * i, h * j + yOffset);
+            s.i = i + nx;
+            s.j = j + ny;
             shapes.push(s);
           }
         }
         break;
     }
   }
-
-  // Shift shapes
-  shapes.forEach(d => {
-    translateShape(d, -xSize / 2, -ySize / 2);
-  });
 
   // Draw polygons
   let polygon = svgTile.select("g").selectAll("polygon")
@@ -438,7 +440,7 @@ function updateTile() {
       }
       
       case "hexagon": {
-        let m = (d.j + (d.i % 2) * 2) % 3;
+        let m = (d.j + (d.i % 2)) % 3;
         return m === 0 ? "#ac1a2f" : m === 1 ? "#000" : "#fff";
       }
     }
