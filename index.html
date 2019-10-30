@@ -30,7 +30,7 @@
       </div>
       <div class="mt-5">
         <h3>Vertices</h3>
-        <div id="vertices" class="text-left"></div>
+        <div id="vertices" class="text-left text-monospace"></div>
       </div>
     </div>
     <div class="col-5">
@@ -42,7 +42,7 @@
       <div id="tile"><svg></svg></div>
     </div>
   </div>
-  <div class="text-right small">
+  <div class="text-right small mt-5">
     <div>Author: David Borland, RENCI, UNC-Chapel Hill</div>
     <div><a href="https://github.com/davidborland/Tesselator">GitHub repository</a></div>
   </div>
@@ -50,12 +50,15 @@
 
 <script type="text/javascript">
 
+// Edit shape
 let shapeType = "triangle";
 let shape = null;
+let shapeScale = 0.08;
 
 // The current svg size
 let size = getWidth();
 
+// Create edit panel
 let svgEdit = d3.select("#edit").select("svg")
     .attr("width", size)
     .attr("height", size);
@@ -67,11 +70,17 @@ gEdit.append("g").attr("class", "background");
 gEdit.append("g").attr("class", "lines");
 gEdit.append("g").attr("class", "points");
 
-createBackground();
+createEditBackground();
 
+// Create tesselation panel
 let svgTile = d3.select("#tile").select("svg")
     .attr("width", size)
     .attr("height", size);
+
+svgTile.append("rect")
+    .attr("width", size)
+    .attr("height", size)
+    .style("fill", "#000");
 
 svgTile.append("g")
     .attr("transform", "translate(" + size / 2 + "," + size / 2 + ")scale(1,-1)");
@@ -113,74 +122,154 @@ function resetShape() {
   }
 }
 
-function createBackground() {  
-  let activeLine = null;
+function createEditBackground() {  
+  // Variables for dragging
   let drag1 = null;
   let drag2 = null;
+  let selfTwin = false;
 
   // Drag behavior
   const drag = d3.drag()
     .on("start", function() {      
+      // Get the mouse position
       let mouse = d3.mouse(this);
       drag1 = { x: mouse[0], y: mouse[1] };
 
+      // Active line segment
       let active = shape.lines.filter(d => d.active)[0];
-      let twin = active.twin;
-
       let activeIndex = shape.lines.indexOf(active);
+      
+      // Twin line segment
+      let twin = active.twin;
       let twinIndex = shape.lines.indexOf(twin);
 
+      // Vector to drag point
       let v = { x: drag1.x - active.p1.x, y: drag1.y - active.p1.y };
 
-      drag2 = { x: twin.p2.x + v.x, y: twin.p2.y + v.y };
+      if (shapeType === "triangle" && active === twin) {
+        // Create complementary drag point
+        drag2 = { x: active.p2.x - v.x, y: active.p2.y - v.y };
 
-      if (activeIndex > twinIndex) {
-        shape.points.splice(twinIndex + 1, 0, drag2);
-        shape.points.splice(activeIndex + 2, 0, drag1);
+        // Add points
+        shape.points.splice(activeIndex + 1, 0, drag1, drag2);
+
+        // Create new line segments
+        let new1 = { p1: active.p1, p2: drag1 };
+        let new2 = { p1: drag1, p2: drag2 };
+        let new3 = { p1: drag2, p2: active.p2 };
+
+        // Set twin segments
+        new1.twin = new3;
+        new2.twin = new2;
+        new3.twin = new1;
+
+        // Handle children of self twins
+        new1.selfTwinChild = true;
+        new3.selfTwinChild = true;
+
+        // Add line segments
+        shape.lines.splice(activeIndex, 1, new1, new2, new3);
+
+        selfTwin = true;
       }
       else {
-        shape.points.splice(activeIndex + 1, 0, drag1);
-        shape.points.splice(twinIndex + 2, 0, drag2);
+        // Create complementary drag point
+        drag2 = shapeType === "triangle" && active.selfTwinChild ?
+          { x: twin.p2.x - v.x, y: twin.p2.y - v.y } : shapeType === "triangle" ? 
+          { x: twin.p1.x + v.x, y: twin.p1.y - v.y } :
+          { x: twin.p2.x + v.x, y: twin.p2.y + v.y };
+
+        // Add points
+        if (activeIndex > twinIndex) {
+          shape.points.splice(twinIndex + 1, 0, drag2);
+          shape.points.splice(activeIndex + 2, 0, drag1);
+        }
+        else {
+          shape.points.splice(activeIndex + 1, 0, drag1);
+          shape.points.splice(twinIndex + 2, 0, drag2);
+        }
+
+        // Create new line segments
+        let new1 = { p1: active.p1, p2: drag1 };
+        let new2 = { p1: drag1, p2: active.p2 };
+        let new3 = { p1: twin.p1, p2: drag2 };
+        let new4 = { p1: drag2, p2: twin.p2 };
+
+        // Set twin segments
+        if (shapeType === "triangle") {
+          new1.twin = new3;
+          new2.twin = new4;
+          new3.twin = new1;
+          new4.twin = new2;
+
+          if (active.selfTwinChild) {
+            new1.selfTwinChild = true;
+            new2.selfTwinChild = true;
+            new3.selfTwinChild = true;
+            new4.selfTwinChild = true;
+          }
+        }
+        else {
+          new1.twin = new4;
+          new2.twin = new3;
+          new3.twin = new2;
+          new4.twin = new1;
+        }
+
+        // Add line segments
+        let offset = twinIndex > activeIndex ? 1 : 0;
+        shape.lines.splice(activeIndex, 1, new1, new2);
+        shape.lines.splice(twinIndex + offset, 1, new3, new4);
+
+        if (active.selfTwinChild) {
+          selfTwin = true;
+        }
       }
-
-      let new1 = { p1: active.p1, p2: drag1 };
-      let new2 = { p1: drag1, p2: active.p2 };
-      let new3 = { p1: twin.p1, p2: drag2 };
-      let new4 = { p1: drag2, p2: twin.p2 };
-
-      new1.twin = new4;
-      new2.twin = new3;
-      new3.twin = new2;
-      new4.twin = new1;
-
-      let offset = twinIndex > activeIndex ? 1 : 0;
-      shape.lines.splice(activeIndex, 1, new1, new2);
-      shape.lines.splice(twinIndex + offset, 1, new3, new4);
 
       update();
     })
     .on("drag", function() {
-      const i = shape.points.indexOf(drag1);
-
+      // Get the mouse position
       let x = d3.event.x;
       let y = d3.event.y;
 
-      let vx = x - drag1.x;
-      let vy = y - drag1.y;
+      // Get change from previous
+      let v = { x: x - drag1.x, y: y - drag1.y };
 
+      // Set the new position
       drag1.x = x;
       drag1.y = y;
 
-      drag2.x += vx;
-      drag2.y += vy;
+      // Set the twin point
+      switch (shapeType) {
+        case "triangle":
+          if (selfTwin) {
+            drag2.x -= v.x;
+            drag2.y -= v.y;          
+          }
+          else {            
+            drag2.x += v.x;
+            drag2.y -= v.y; 
+          }
+          break;
+
+        case "square":
+        case "hexagon":
+          drag2.x += v.x;
+          drag2.y += v.y;
+          break;
+      }
 
       update();
     })
     .on("end", function() {     
+      // Reset
       drag1 = null;
       drag2 = null;
+      selfTwin = false;
     });
 
+  // Create the background rectangle
   svgEdit.select(".background").append("rect")
       .attr("x", -size / 2)
       .attr("y", -size / 2)
@@ -201,87 +290,28 @@ function createBackground() {
           return p === null || d < p.d ? { i: i, d: d } : p;
         }, null);
 
+        // Clear active
         shape.lines.forEach(d => {
           d.active = false;
         });
 
+        // Set active
         shape.lines[closest.i].active = true;
 
         update();
       })
       .on("mouseout", function() {
+        // Clear active
         shape.lines.forEach(d => {
           d.active = false;
         });
 
         update();
       })
-      .on("click", function() {
-      })
       .call(drag);
 }
 
 function updateEdit() {  
-  let r = 5;
-
-  // Drag behavior for control handles
-  const drag = d3.drag()
-    .on("start", function(d) {
-      // Turn off mouse events for other handles while dragging
-      gControl.selectAll(".handle").filter(function(e) { return e !== d; })
-          .style("pointer-events", "none");
-    })
-    .on("drag", function(d, i) {
-      let x = d3.event.x;
-      let y = d3.event.y;
-
-      let vx = x - d.x;
-      let vy = y - d.y;
-
-      d.x = x;
-      d.y = y;
-
-      let j = (i + 2) % shape.points.length;
-      let p = shape.points[j];
-
-      p.x += vx;
-      p.y += vy; 
-
-      update();
-    })
-    .on("end", function() {     
-      // Turn mouse events back on for handles
-      gControl.selectAll(".handle")
-          .style("pointer-events", null);
-    });
-
-  // Draw points
-  let point = svgEdit.select(".points").selectAll("circle")
-      .data(shape.points);
-
-  point.enter().append("circle")
-      .attr("r", r)
-      .style("pointer-events", "all")
-    .merge(point)
-      .attr("cx", d => d.x)
-      .attr("cy", d => d.y)
-      .style("fill", "#ac1a2f")
-      .style("stroke", "black")
-      .style("visibility", d => d.active ? "visible" : "hidden");
-/*      
-      .on("mouseover", function(d) {
-        d.active = true;
-        update();
-      })
-      .on("mouseout", function(d) {
-        d.active = false;
-        update();
-      })
-      .call(drag);
-*/      
-      
-  point.exit().remove();
-
   // Draw lines
   let line = svgEdit.select(".lines").selectAll("line")
       .data(shape.lines);
@@ -301,45 +331,85 @@ function updateEdit() {
 }
 
 function updateTile() {
-  if (shapeType !== "square") return;
+  let shapes = [];
 
   let xExtent = d3.extent(shape.points, d => d.x);
   let yExtent = d3.extent(shape.points, d => d.y);
-
+  
   xExtent = xExtent[1] - xExtent[0];
   yExtent = yExtent[1] - yExtent[0];
 
-  let w = d3.max(shape.lines, d => {
-    return Math.max(d.p1.x - d.twin.p2.x, d.p2.x - d.twin.p1.x);
-  });
+  let xSize = size + xExtent * 2;
+  let ySize = size + yExtent * 2;
 
-  let h = d3.max(shape.lines, d => {
-    return Math.max(d.p1.y - d.twin.p2.y, d.p2.y - d.twin.p1.y);
-  });
+  if (shapeType === "triangle") {
+    // Get width and height offset
+    let s = size * shapeScale;
+    let a = 30 * Math.PI / 180;
+    let x = Math.cos(a) * s;
+    let y = Math.sin(a) * s;
 
-  let xSize = ySize = getWidth();
-  xSize += xExtent * 2;
-  ySize += yExtent * 2;
+    w = x * 2;
+    h = s + y;
 
-  let shapes = [];
-  for (x = 0, i = 0; x < xSize; x += w, i++) {
-    for (y = 0, j = 0; y < ySize; y += h, j++) {
-      let s = copyShape(shape);
-      translateShape(s, x, y);
-      s.i = i;
-      s.j = j;
-      shapes.push(s);
+    // Create shapes
+    for (let y = 0, j = 0; y < ySize; y += h, j++) {
+      let x = j % 2 === 0 ? 0 : w / 2;
+
+      for (let i = 0; x < xSize; x += w, i++) {
+        let s = copyShape(shape);
+        translateShape(s, x, y);
+        shapes.push(s);
+      }
+    }
+  }
+  else {
+    // Get shape width offset
+    let w = d3.max(shape.lines, d => {
+      return Math.max(d.p1.x - d.twin.p2.x, d.p2.x - d.twin.p1.x);
+    });
+
+    // Get shape height offset
+    let h = d3.max(shape.lines, d => {
+      return Math.max(d.p1.y - d.twin.p2.y, d.p2.y - d.twin.p1.y);
+    });
+
+    // Create shapes
+    switch (shapeType) {
+      case "square":
+        for (let x = 0, i = 0; x < xSize; x += w, i++) {
+          for (let y = 0, j = 0; y < ySize; y += h, j++) {
+            let s = copyShape(shape);
+            translateShape(s, x, y);
+            s.i = i;
+            s.j = j;
+            shapes.push(s);
+          }
+        }
+        break;
+
+      case "hexagon":
+        for (let x = 0, i = 0; x < xSize; x += w, i++) {
+          let y = i % 2 === 0 ? 0 : h / 2;
+          for (let j = 0; y < ySize; y += h, j++) {
+            let s = copyShape(shape);
+            translateShape(s, x, y);
+            s.i = i;
+            s.j = j;
+            shapes.push(s);
+          }
+        }
+        break;
     }
   }
 
+  // Shift shapes
   shapes.forEach(d => {
     translateShape(d, -xSize / 2, -ySize / 2);
   });
 
-  let g = svgTile.select("g");
-
   // Draw polygons
-  let polygon = g.selectAll("polygon")
+  let polygon = svgTile.select("g").selectAll("polygon")
       .data(shapes);
 
   polygon.enter().append("polygon")
@@ -357,7 +427,21 @@ function updateTile() {
   }
 
   function fill(d) {
-    return (d.i + (d.j % 2)) % 2 === 0 ? "#ac1a2f" : "black";
+    switch (shapeType) {
+      case "triangle": {
+        return "#ac1a2f";
+      }
+
+      case "square": {
+        let m = (d.i + (d.j % 2)) % 2;
+        return m === 0 ? "#ac1a2f" : "#000";
+      }
+      
+      case "hexagon": {
+        let m = (d.j + (d.i % 2) * 2) % 3;
+        return m === 0 ? "#ac1a2f" : m === 1 ? "#000" : "#fff";
+      }
+    }
   }
 }
 
@@ -392,25 +476,31 @@ function translateShape(shape, x, y) {
 }
 
 function newTriangle() {
-  let s = size / 20;
+  let s = size * shapeScale;
   let a = 30 * Math.PI / 180;
   let x = Math.cos(a) * s;
   let y = Math.sin(a) * s;
 
   let points = [
-    { x: 0, y: s },
-    { x: x, y: -y },
-    { x: -x, y: -y }
+    { x: -x, y: y },
+    { x: x, y: y },
+    { x: 0, y: -s }
   ];
+
+  let lines = linesFromPoints(points);
+
+  lines[0].twin = lines[0];
+  lines[1].twin = lines[2];
+  lines[2].twin = lines[1];
 
   return {
     points: points,
-    lines: linesFromPoints(points)
+    lines: lines
   };
 }
 
 function newSquare() {
-  let s = size / 20;
+  let s = size * shapeScale;
 
   let points = [
     { x: -s, y: s },
@@ -433,7 +523,7 @@ function newSquare() {
 }
 
 function newHexagon() {
-  let s = size / 20;
+  let s = size * shapeScale;
   let a = 60 * Math.PI / 180;
   
   let points = d3.range(-a, 4.5 * a, a).map(d => {
@@ -443,9 +533,18 @@ function newHexagon() {
     };
   });
 
+  let lines = linesFromPoints(points);
+
+  lines[0].twin = lines[3];
+  lines[1].twin = lines[4];
+  lines[2].twin = lines[5];
+  lines[3].twin = lines[0];
+  lines[4].twin = lines[1];
+  lines[5].twin = lines[2];
+
   return {
     points: points,
-    lines: linesFromPoints(points)
+    lines: lines
   };
 }
 
