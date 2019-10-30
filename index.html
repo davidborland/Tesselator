@@ -134,8 +134,14 @@ function createBackground() {
 
       drag2 = { x: twin.p2.x + v.x, y: twin.p2.y + v.y };
 
-      shape.points.splice(activeIndex + 1, 0, drag1);
-      shape.points.splice(twinIndex + 2, 0, drag2);
+      if (activeIndex > twinIndex) {
+        shape.points.splice(twinIndex + 1, 0, drag2);
+        shape.points.splice(activeIndex + 2, 0, drag1);
+      }
+      else {
+        shape.points.splice(activeIndex + 1, 0, drag1);
+        shape.points.splice(twinIndex + 2, 0, drag2);
+      }
 
       let new1 = { p1: active.p1, p2: drag1 };
       let new2 = { p1: drag1, p2: active.p2 };
