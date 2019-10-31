@@ -29,8 +29,9 @@
         <button type="button" class="btn btn-secondary form-control" id="resetButton">Reset</button>
       </div>
       <div class="mt-5">
-        <h3>Vertices</h3>        
-        <samp id="vertices" class="text-left card bg-light pl-1"></samp>
+        <h3>Vertices</h3>               
+        <button type="button" class="btn btn-secondary form-control mb-3" id="copyButton">Copy</button> 
+        <samp id="vertices" class="text-left card bg-light small pl-1"></samp>
       </div>
     </div>
     <div class="col-5">
@@ -96,6 +97,12 @@ d3.select("#shapeSelect").on("change", () => {
 
 // Reset button
 d3.select("#resetButton").on("click", resetShape);
+
+// Copy vertices button
+d3.select("#copyButton").on("click", () => {
+  navigator.clipboard.writeText(d3.select("#vertices").node().innerText)
+    .then(() => {}, () => { alert("Copy failed!"); });
+});
 
 function update() {
   updateEdit();
